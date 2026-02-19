@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RestaurantOS — Management System</title>
+  <meta name="description"
+    content="Professional hotel and restaurant management system with role-based access, product management, raw materials tracking, and sales analytics." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+
+<body>
+  <div id="app">
+    <!-- Login Page -->
+    <div id="login-page" class="page active">
+      <div class="login-bg">
+        <div class="login-orb orb-1"></div>
+        <div class="login-orb orb-2"></div>
+        <div class="login-orb orb-3"></div>
+      </div>
+      <div class="login-container">
+        <div class="login-card">
+          <div class="login-logo">
+            <div class="logo-icon">🍽️</div>
+            <h1 class="login-title">RestaurantOS</h1>
+            <p class="login-subtitle">Management System</p>
+          </div>
+          <form id="login-form" class="login-form">
+            <div class="form-group">
+              <label for="login-email">Email Address</label>
+              <div class="input-wrapper">
+                <span class="input-icon">✉️</span>
+                <input type="email" id="login-email" placeholder="admin@restaurant.com" required autocomplete="email" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="login-password">Password</label>
+              <div class="input-wrapper">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="login-password" placeholder="Enter your password" required
+                  autocomplete="current-password" />
+                <button type="button" class="toggle-password" id="toggle-pwd"
+                  aria-label="Toggle password visibility">👁️</button>
+              </div>
+            </div>
+            <div id="login-error" class="alert alert-error hidden"></div>
+            <button type="submit" id="login-btn" class="btn btn-primary btn-full">
+              <span class="btn-text">Sign In</span>
+              <span class="btn-loader hidden">⏳</span>
+            </button>
+          </form>
+          <p class="login-hint">Default: admin@restaurant.com / admin123</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" class="page hidden">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-logo">
+            <span class="logo-emoji">🍽️</span>
+            <span class="logo-text">RestaurantOS</span>
+          </div>
+          <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+        </div>
+
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <span class="nav-section-label">Overview</span>
+            <a href="#" class="nav-item active" data-page="dashboard" id="nav-dashboard">
+              <span class="nav-icon">📊</span>
+              <span class="nav-label">Dashboard</span>
+            </a>
+          </div>
+          <div class="nav-section">
+            <span class="nav-section-label">Management</span>
+            <a href="#" class="nav-item" data-page="products" id="nav-products">
+              <span class="nav-icon">🍕</span>
+              <span class="nav-label">Products</span>
+            </a>
+            <a href="#" class="nav-item" data-page="raw-materials" id="nav-raw-materials">
+              <span class="nav-icon">🥦</span>
+              <span class="nav-label">Raw Materials</span>
+            </a>
+            <a href="#" class="nav-item" data-page="sales" id="nav-sales">
+              <span class="nav-icon">💰</span>
+              <span class="nav-label">Sales</span>
+            </a>
+          </div>
+          <div class="nav-section" id="admin-section">
+            <span class="nav-section-label">Admin</span>
+            <a href="#" class="nav-item" data-page="users" id="nav-users">
+              <span class="nav-icon">👥</span>
+              <span class="nav-label">Users</span>
+            </a>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user-info" id="sidebar-user-info">
+            <div class="user-avatar" id="sidebar-avatar">A</div>
+            <div class="user-details">
+              <span class="user-name" id="sidebar-user-name">Loading...</span>
+              <span class="user-role" id="sidebar-user-role">—</span>
+            </div>
+          </div>
+          <button class="btn-logout" id="logout-btn" title="Logout">🚪</button>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content" id="main-content">
+        <!-- Top Bar -->
+        <header class="topbar">
+          <div class="topbar-left">
+            <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open menu">☰</button>
+            <div class="page-breadcrumb">
+              <span id="page-title">Dashboard</span>
+            </div>
+          </div>
+          <div class="topbar-right">
+            <div class="topbar-time" id="topbar-time"></div>
+            <div class="topbar-user">
+              <div class="user-avatar sm" id="topbar-avatar">A</div>
+              <span id="topbar-user-name">Admin</span>
+            </div>
+          </div>
+        </header>
+
+        <!-- Pages -->
+        <div class="content-area">
+
+          <!-- Dashboard Page -->
+          <section id="page-dashboard" class="content-page active">
+            <div class="page-header">
+              <h2>Dashboard Overview</h2>
+              <p class="page-desc">Real-time insights into your restaurant's performance</p>
+            </div>
+            <div class="stats-grid" id="dashboard-stats">
+              <div class="stat-card" id="stat-revenue">
+                <div class="stat-icon">💵</div>
+                <div class="stat-info">
+                  <span class="stat-label">Total Revenue</span>
+                  <span class="stat-value" id="stat-revenue-val">—</span>
+                </div>
+              </div>
+              <div class="stat-card" id="stat-profit">
+                <div class="stat-icon">📈</div>
+                <div class="stat-info">
+                  <span class="stat-label">Total Profit</span>
+                  <span class="stat-value" id="stat-profit-val">—</span>
+                </div>
+              </div>
+              <div class="stat-card" id="stat-products">
+                <div class="stat-icon">🍕</div>
+                <div class="stat-info">
+                  <span class="stat-label">Products</span>
+                  <span class="stat-value" id="stat-products-val">—</span>
+                </div>
+              </div>
+              <div class="stat-card" id="stat-sales">
+                <div class="stat-icon">🧾</div>
+                <div class="stat-info">
+                  <span class="stat-label">Total Sales</span>
+                  <span class="stat-value" id="stat-sales-val">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="dashboard-kpi-grid">
+              <div class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Daily Profit</span>
+                <span class="dashboard-kpi-value" id="kpi-daily-profit">—</span>
+              </div>
+              <div class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Yesterday's Profit</span>
+                <span class="dashboard-kpi-value" id="kpi-yesterday-profit">—</span>
+              </div>
+              <div class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Total Sales Count</span>
+                <span class="dashboard-kpi-value" id="kpi-total-sales">—</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3>🛍️ Product Snapshot</h3>
+              </div>
+              <div class="card-body">
+                <div class="dashboard-product-cards" id="dashboard-product-cards"></div>
+              </div>
+            </div>
+
+            <div class="dashboard-grid">
+              <div class="card">
+                <div class="card-header">
+                  <h3>🏆 Top Products by Sales</h3>
+                </div>
+                <div class="card-body">
+                  <div id="top-products-list" class="product-rank-list"></div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <h3>📋 Recent Sales</h3>
+                </div>
+                <div class="card-body">
+                  <div id="recent-sales-list" class="recent-list"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Products Page -->
+          <section id="page-products" class="content-page hidden">
+            <div class="page-header">
+              <div>
+                <h2>Products</h2>
+                <p class="page-desc">Manage your menu items and pricing</p>
+              </div>
+              <button class="btn btn-primary" id="add-product-btn">+ Add Product</button>
+            </div>
+            <div class="product-cards-grid" id="products-grid">
+            </div>
+            <div class="card hidden" id="products-empty-card">
+              <div class="card-body">
+                <div class="empty-state">
+                  <div class="empty-icon">🍕</div>
+                  <p>No products yet. Add your first product!</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Raw Materials Page -->
+          <section id="page-raw-materials" class="content-page hidden">
+            <div class="page-header">
+              <div>
+                <h2>Raw Materials</h2>
+                <p class="page-desc">Track inventory, costs, and stock levels</p>
+              </div>
+              <div class="page-header-actions">
+                <button class="btn btn-warning" id="filter-lowstock-btn" title="Show only low-stock items">⚠️ Low Stock
+                  Only</button>
+                <button class="btn btn-primary" id="add-material-btn">+ Add Material</button>
+              </div>
+            </div>
+
+            <!-- Stats Banner -->
+            <div class="rm-stats-grid" id="rm-stats-grid">
+              <div class="rm-stat-card">
+                <div class="rm-stat-icon">📦</div>
+                <div class="rm-stat-info">
+                  <span class="rm-stat-label">Total Materials</span>
+                  <span class="rm-stat-value" id="rm-stat-total">—</span>
+                </div>
+              </div>
+              <div class="rm-stat-card">
+                <div class="rm-stat-icon">💰</div>
+                <div class="rm-stat-info">
+                  <span class="rm-stat-label">Inventory Value</span>
+                  <span class="rm-stat-value" id="rm-stat-value">—</span>
+                </div>
+              </div>
+              <div class="rm-stat-card rm-stat-card--warning" id="rm-stat-lowstock-card">
+                <div class="rm-stat-icon">⚠️</div>
+                <div class="rm-stat-info">
+                  <span class="rm-stat-label">Low Stock Items</span>
+                  <span class="rm-stat-value" id="rm-stat-lowstock">—</span>
+                </div>
+              </div>
+              <div class="rm-stat-card">
+                <div class="rm-stat-icon">🔢</div>
+                <div class="rm-stat-info">
+                  <span class="rm-stat-label">Unique Units</span>
+                  <span class="rm-stat-value" id="rm-stat-units">—</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Low-stock alert strip -->
+            <div class="low-stock-alert hidden" id="low-stock-alert">
+              <span class="low-stock-alert-icon">⚠️</span>
+              <span id="low-stock-alert-text">Some items are running low on stock.</span>
+              <button class="low-stock-alert-close" id="low-stock-alert-close" aria-label="Dismiss">✕</button>
+            </div>
+
+            <div class="card">
+              <div class="card-body no-pad">
+                <div class="table-wrapper">
+                  <table class="data-table" id="materials-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Quantity</th>
+                        <th>Threshold</th>
+                        <th>Status</th>
+                        <th>Unit</th>
+                        <th>Cost/Unit</th>
+                        <th>Total Value</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="materials-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Sales Page -->
+          <section id="page-sales" class="content-page hidden">
+            <div class="page-header">
+              <div>
+                <h2>POS / Billing</h2>
+                <p class="page-desc">Select products, build a cart, and checkout with inventory validation</p>
+              </div>
+            </div>
+            <div class="sales-summary-bar" id="sales-summary-bar">
+              <div class="summary-item">
+                <span class="summary-label">Transactions</span>
+                <span class="summary-val" id="sum-transactions">—</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Items Sold</span>
+                <span class="summary-val" id="sum-items">—</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Revenue</span>
+                <span class="summary-val" id="sum-revenue">—</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Profit</span>
+                <span class="summary-val" id="sum-profit">—</span>
+              </div>
+            </div>
+
+            <div class="pos-layout">
+              <div class="card">
+                <div class="card-header">
+                  <h3>Products</h3>
+                </div>
+                <div class="card-body">
+                  <div class="pos-products-grid" id="pos-products-grid"></div>
+                </div>
+              </div>
+
+              <div class="card pos-cart-card">
+                <div class="card-header">
+                  <h3>Current Cart</h3>
+                </div>
+                <div class="card-body">
+                  <div id="pos-checkout-success" class="pos-checkout-success hidden">Checkout successful</div>
+                  <div id="pos-cart-items" class="pos-cart-items"></div>
+                  <div class="pos-cart-summary">
+                    <div class="pos-cart-row">
+                      <span>Items</span>
+                      <strong id="pos-cart-total-items">0</strong>
+                    </div>
+                    <div class="pos-cart-row">
+                      <span>Total Bill</span>
+                      <strong id="pos-cart-total-bill">$0.00</strong>
+                    </div>
+                    <div class="pos-cart-row">
+                      <span>Total Profit</span>
+                      <strong id="pos-cart-total-profit" class="profit-positive">$0.00</strong>
+                    </div>
+                  </div>
+                  <button class="btn btn-primary btn-full" id="pos-checkout-btn">Sell / Checkout</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3>Sales History</h3>
+              </div>
+              <div class="card-body no-pad">
+                <div class="table-wrapper">
+                  <table class="data-table" id="sales-table">
+                    <thead>
+                      <tr>
+                        <th>Product</th>
+                        <th>Quantity</th>
+                        <th>Total Price</th>
+                        <th>Total Profit</th>
+                        <th>Date & Time</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sales-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Users Page (Super Admin only) -->
+          <section id="page-users" class="content-page hidden">
+            <div class="page-header">
+              <div>
+                <h2>User Management</h2>
+                <p class="page-desc">Manage system users and roles</p>
+              </div>
+              <button class="btn btn-primary" id="add-user-btn">+ Add User</button>
+            </div>
+            <div class="card">
+              <div class="card-body no-pad">
+                <div class="table-wrapper">
+                  <table class="data-table" id="users-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="users-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Modal Title</h3>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/js/app.js"></script>
+</body>
+
+</html>
