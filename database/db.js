@@ -2,25 +2,20 @@ const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  console.warn('⚠️  DATABASE_URL is not set. Set it to your Postgres connection string.');
-}
-
-const shouldUseSsl =
-  (process.env.PGSSL && process.env.PGSSL.toLowerCase() === 'true') ||
-  (process.env.NODE_ENV === 'production' && process.env.PGSSL?.toLowerCase() !== 'false');
-
 let pool;
 function getPool() {
-  if (!DATABASE_URL) {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
     const err = new Error('DATABASE_URL is not set.');
     err.code = 'MISSING_DATABASE_URL';
     throw err;
   }
   if (!pool) {
+    const shouldUseSsl =
+      (process.env.PGSSL && process.env.PGSSL.toLowerCase() === 'true') ||
+      (process.env.NODE_ENV === 'production' && process.env.PGSSL?.toLowerCase() !== 'false');
     pool = new Pool({
-      connectionString: DATABASE_URL,
+      connectionString: databaseUrl,
       ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
     });
   }
