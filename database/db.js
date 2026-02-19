@@ -11,10 +11,21 @@ const shouldUseSsl =
   (process.env.PGSSL && process.env.PGSSL.toLowerCase() === 'true') ||
   (process.env.NODE_ENV === 'production' && process.env.PGSSL?.toLowerCase() !== 'false');
 
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
-});
+let pool;
+function getPool() {
+  if (!DATABASE_URL) {
+    const err = new Error('DATABASE_URL is not set.');
+    err.code = 'MISSING_DATABASE_URL';
+    throw err;
+  }
+  if (!pool) {
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+    });
+  }
+  return pool;
+}
 
 function toPgPlaceholders(sql) {
   if (!sql || typeof sql !== 'string' || sql.indexOf('?') === -1) return sql;
@@ -28,22 +39,22 @@ async function query(poolOrClient, sql, params = []) {
 }
 
 async function dbRun(sql, params = []) {
-  const result = await query(pool, sql, params);
+  const result = await query(getPool(), sql, params);
   return { changes: result.rowCount };
 }
 
 async function dbGet(sql, params = []) {
-  const result = await query(pool, sql, params);
+  const result = await query(getPool(), sql, params);
   return result.rows[0];
 }
 
 async function dbAll(sql, params = []) {
-  const result = await query(pool, sql, params);
+  const result = await query(getPool(), sql, params);
   return result.rows;
 }
 
 async function withTransaction(fn) {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     const tx = {
