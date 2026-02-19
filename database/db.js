@@ -1,58 +1,76 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
-// Ensure the data directory exists for persistent storage
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.warn('⚠️  DATABASE_URL is not set. Set it to your Postgres connection string.');
 }
 
-const DB_PATH = path.join(dataDir, 'restaurant.db');
-console.log(`📁 Database path: ${DB_PATH}`);
+const shouldUseSsl =
+  (process.env.PGSSL && process.env.PGSSL.toLowerCase() === 'true') ||
+  (process.env.NODE_ENV === 'production' && process.env.PGSSL?.toLowerCase() !== 'false');
 
-let db;
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+});
 
-function getDb() {
-  if (!db) {
-    db = new sqlite3.Database(DB_PATH, (err) => {
-      if (err) console.error('DB connection error:', err);
-      else console.log('✅ Connected to SQLite database');
-    });
-    db.run('PRAGMA journal_mode = WAL');
-    db.run('PRAGMA foreign_keys = ON');
+function toPgPlaceholders(sql) {
+  if (!sql || typeof sql !== 'string' || sql.indexOf('?') === -1) return sql;
+  let index = 0;
+  return sql.replace(/\?/g, () => `$${++index}`);
+}
+
+async function query(poolOrClient, sql, params = []) {
+  const normalizedSql = toPgPlaceholders(sql);
+  return poolOrClient.query(normalizedSql, params);
+}
+
+async function dbRun(sql, params = []) {
+  const result = await query(pool, sql, params);
+  return { changes: result.rowCount };
+}
+
+async function dbGet(sql, params = []) {
+  const result = await query(pool, sql, params);
+  return result.rows[0];
+}
+
+async function dbAll(sql, params = []) {
+  const result = await query(pool, sql, params);
+  return result.rows;
+}
+
+async function withTransaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const tx = {
+      run: async (sql, params = []) => {
+        const result = await query(client, sql, params);
+        return { changes: result.rowCount };
+      },
+      get: async (sql, params = []) => {
+        const result = await query(client, sql, params);
+        return result.rows[0];
+      },
+      all: async (sql, params = []) => {
+        const result = await query(client, sql, params);
+        return result.rows;
+      },
+    };
+    const value = await fn(tx);
+    await client.query('COMMIT');
+    return value;
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
   }
-  return db;
-}
-
-// Promisified helpers
-function dbRun(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    getDb().run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve({ lastID: this.lastID, changes: this.changes });
-    });
-  });
-}
-
-function dbGet(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    getDb().get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
-}
-
-function dbAll(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    getDb().all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
 }
 
 async function initializeSchema() {
@@ -63,7 +81,7 @@ async function initializeSchema() {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('super_admin', 'staff')),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -72,23 +90,10 @@ async function initializeSchema() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       photo_url TEXT,
-      manufacturing_cost REAL NOT NULL DEFAULT 0,
-      selling_price REAL NOT NULL DEFAULT 0,
+      manufacturing_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+      selling_price DOUBLE PRECISION NOT NULL DEFAULT 0,
       sell_count INTEGER NOT NULL DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS ProductIngredients (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      raw_material_id TEXT NOT NULL,
-      quantity_used REAL NOT NULL CHECK(quantity_used > 0),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE,
-      FOREIGN KEY (raw_material_id) REFERENCES RawMaterials(id) ON DELETE RESTRICT,
-      UNIQUE(product_id, raw_material_id)
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -96,35 +101,41 @@ async function initializeSchema() {
     CREATE TABLE IF NOT EXISTS RawMaterials (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      quantity_available REAL NOT NULL DEFAULT 0,
+      quantity_available DOUBLE PRECISION NOT NULL DEFAULT 0,
       unit TEXT NOT NULL,
-      cost_per_unit REAL NOT NULL DEFAULT 0,
-      low_stock_threshold REAL NOT NULL DEFAULT 10,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      cost_per_unit DOUBLE PRECISION NOT NULL DEFAULT 0,
+      low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 10,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
-  // Migration: add low_stock_threshold to existing databases that don't have it
-  const rmCols = await dbAll("PRAGMA table_info(RawMaterials)");
-  const hasThreshold = rmCols.some(c => c.name === 'low_stock_threshold');
-  if (!hasThreshold) {
-    await dbRun('ALTER TABLE RawMaterials ADD COLUMN low_stock_threshold REAL NOT NULL DEFAULT 10');
-    console.log('✅ Migration: added low_stock_threshold column to RawMaterials');
-  }
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS ProductIngredients (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL REFERENCES Products(id) ON DELETE CASCADE,
+      raw_material_id TEXT NOT NULL REFERENCES RawMaterials(id) ON DELETE RESTRICT,
+      quantity_used DOUBLE PRECISION NOT NULL CHECK(quantity_used > 0),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(product_id, raw_material_id)
+    )
+  `);
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS Sales (
       id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
+      product_id TEXT NOT NULL REFERENCES Products(id) ON DELETE CASCADE,
       quantity INTEGER NOT NULL,
-      total_price REAL NOT NULL,
-      total_profit REAL NOT NULL,
-      date_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
+      total_price DOUBLE PRECISION NOT NULL,
+      total_profit DOUBLE PRECISION NOT NULL,
+      date_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
-  // Seed super admin if not exists
+  await dbRun(`
+    ALTER TABLE RawMaterials
+    ADD COLUMN IF NOT EXISTS low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 10
+  `);
+
   const admin = await dbGet("SELECT id FROM Users WHERE role = 'super_admin' LIMIT 1");
   if (!admin) {
     const hashedPassword = bcrypt.hashSync('admin123', 12);
@@ -136,4 +147,4 @@ async function initializeSchema() {
   }
 }
 
-module.exports = { getDb, dbRun, dbGet, dbAll, initializeSchema };
+module.exports = { dbRun, dbGet, dbAll, withTransaction, initializeSchema };

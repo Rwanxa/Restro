@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { dbRun, dbGet, dbAll } = require('../database/db');
+const { dbRun, dbGet, dbAll, withTransaction } = require('../database/db');
 const { authenticateToken } = require('../middleware/auth');
 
 // Setup multer for photo uploads
@@ -57,8 +57,8 @@ async function getIngredientsByProduct(productId) {
     `, [productId]);
 }
 
-async function setProductIngredients(productId, ingredients) {
-    await dbRun('DELETE FROM ProductIngredients WHERE product_id = ?', [productId]);
+async function setProductIngredients(q, productId, ingredients) {
+    await q.run('DELETE FROM ProductIngredients WHERE product_id = ?', [productId]);
     if (!ingredients || ingredients.length === 0) return 0;
 
     const seen = new Set();
@@ -74,11 +74,11 @@ async function setProductIngredients(productId, ingredients) {
         if (seen.has(rawMaterialId)) throw new Error('Duplicate raw material in ingredients.');
         seen.add(rawMaterialId);
 
-        const rawMaterial = await dbGet('SELECT id, cost_per_unit FROM RawMaterials WHERE id = ?', [rawMaterialId]);
+        const rawMaterial = await q.get('SELECT id, cost_per_unit FROM RawMaterials WHERE id = ?', [rawMaterialId]);
         if (!rawMaterial) throw new Error('One or more ingredients reference invalid raw materials.');
         manufacturingCost += quantityUsed * Number(rawMaterial.cost_per_unit || 0);
 
-        await dbRun(
+        await q.run(
             'INSERT INTO ProductIngredients (id, product_id, raw_material_id, quantity_used) VALUES (?, ?, ?, ?)',
             [uuidv4(), productId, rawMaterialId, quantityUsed]
         );
@@ -147,18 +147,17 @@ router.post('/', authenticateToken, upload.single('photo'), async (req, res) => 
         }
         const id = uuidv4();
         const photo_url = req.file ? `/uploads/${req.file.filename}` : null;
-        await dbRun('BEGIN');
-        await dbRun(
-            'INSERT INTO Products (id, name, photo_url, manufacturing_cost, selling_price) VALUES (?, ?, ?, ?, ?)',
-            [id, name, photo_url, 0, parseFloat(selling_price)]
-        );
-        const manufacturingCost = await setProductIngredients(id, ingredients);
-        await dbRun('UPDATE Products SET manufacturing_cost = ? WHERE id = ?', [manufacturingCost, id]);
-        await dbRun('COMMIT');
+        await withTransaction(async (tx) => {
+            await tx.run(
+                'INSERT INTO Products (id, name, photo_url, manufacturing_cost, selling_price) VALUES (?, ?, ?, ?, ?)',
+                [id, name, photo_url, 0, parseFloat(selling_price)]
+            );
+            const manufacturingCost = await setProductIngredients(tx, id, ingredients);
+            await tx.run('UPDATE Products SET manufacturing_cost = ? WHERE id = ?', [manufacturingCost, id]);
+        });
         const product = await getProductById(id);
         res.status(201).json(product);
     } catch (err) {
-        try { await dbRun('ROLLBACK'); } catch (_) { }
         res.status(getClientErrorStatus(err.message)).json({ error: err.message });
     }
 });
@@ -175,25 +174,24 @@ router.put('/:id', authenticateToken, upload.single('photo'), async (req, res) =
             : null;
         const photo_url = req.file ? `/uploads/${req.file.filename}` : existing.photo_url;
 
-        await dbRun('BEGIN');
-        const nextManufacturingCost = ingredients !== null
-            ? await setProductIngredients(req.params.id, ingredients)
-            : (manufacturing_cost !== undefined ? parseFloat(manufacturing_cost) : existing.manufacturing_cost);
-        await dbRun(
-            'UPDATE Products SET name = ?, photo_url = ?, manufacturing_cost = ?, selling_price = ? WHERE id = ?',
-            [
-                name || existing.name,
-                photo_url,
-                nextManufacturingCost,
-                selling_price !== undefined ? parseFloat(selling_price) : existing.selling_price,
-                req.params.id
-            ]
-        );
-        await dbRun('COMMIT');
+        await withTransaction(async (tx) => {
+            const nextManufacturingCost = ingredients !== null
+                ? await setProductIngredients(tx, req.params.id, ingredients)
+                : (manufacturing_cost !== undefined ? parseFloat(manufacturing_cost) : existing.manufacturing_cost);
+            await tx.run(
+                'UPDATE Products SET name = ?, photo_url = ?, manufacturing_cost = ?, selling_price = ? WHERE id = ?',
+                [
+                    name || existing.name,
+                    photo_url,
+                    nextManufacturingCost,
+                    selling_price !== undefined ? parseFloat(selling_price) : existing.selling_price,
+                    req.params.id
+                ]
+            );
+        });
         const updated = await getProductById(req.params.id);
         res.json(updated);
     } catch (err) {
-        try { await dbRun('ROLLBACK'); } catch (_) { }
         res.status(getClientErrorStatus(err.message)).json({ error: err.message });
     }
 });
